@@ -1,0 +1,29 @@
+Package: meshdb
+Title: Navigate a Local MeSH Ontology Database
+Version: 0.0.0.9000
+Authors@R: 
+    person("Steve", "User", role = c("aut", "cre"), email = "steve@example.com")
+Author: Steve User
+Maintainer: Steve User <steve@example.com>
+Description: Query local parquet files containing MeSH terms, parent-child
+    relationships, ancestor relationships, and PubMed-to-MeSH mappings.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1)
+Imports:
+    DBI,
+    dbplyr,
+    dplyr,
+    duckdb,
+    purrr,
+    rlang,
+    stringr,
+    tibble
+Suggests:
+    arrow,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
