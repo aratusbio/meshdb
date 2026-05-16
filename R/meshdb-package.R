@@ -7,10 +7,22 @@
 #' @keywords internal
 "_PACKAGE"
 
+#' Run meshdb package load checks
+#'
+#' @param libname Library path supplied by R.
+#' @param pkgname Package name supplied by R.
+#'
+#' @return `NULL`, invisibly.
+#' @noRd
 .onLoad <- function(libname, pkgname) {
   warn_invalid_meshdb_parquet_path()
 }
 
+#' Warn when the configured parquet path is missing or invalid
+#'
+#' @return `TRUE` invisibly when the environment variable points to a directory;
+#'   otherwise `FALSE` invisibly after warning.
+#' @noRd
 warn_invalid_meshdb_parquet_path <- function() {
   path <- Sys.getenv("MESHDB_PARQUET_PATH", unset = NA_character_)
 

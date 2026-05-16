@@ -1,3 +1,12 @@
+#' Annotate relationship IDs with term metadata
+#'
+#' @param data A lazy or local data frame containing an ID column.
+#' @param id_column Name of the ID column to annotate.
+#' @param prefix Prefix for the joined term metadata columns.
+#' @param db A `meshdb` object returned by [meshdb()].
+#'
+#' @return `data` with term metadata columns joined in.
+#' @noRd
 annotate_terms <- function(data, id_column, prefix, db) {
   terms <- term_summary(db) |>
     dplyr::rename_with(
@@ -9,9 +18,20 @@ annotate_terms <- function(data, id_column, prefix, db) {
     terms <- dplyr::collect(terms)
   }
 
-  dplyr::left_join(data, terms, by = stats::setNames(paste0(prefix, "_id"), id_column))
+  dplyr::left_join(
+    data,
+    terms,
+    by = stats::setNames(paste0(prefix, "_id"), id_column)
+  )
 }
 
+#' Compute ancestor hop distances
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#' @param inputs A data frame with `input` and `mesh_id` columns.
+#'
+#' @return A tibble with offspring, ancestor, category, and distance columns.
+#' @noRd
 ancestor_distances <- function(db, inputs) {
   inputs <- copy_resolved_ids(db, inputs)
   input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
@@ -19,7 +39,9 @@ ancestor_distances <- function(db, inputs) {
   query <- paste0(
     "WITH RECURSIVE lineage(input, offspring_id, ancestor_id, distance) AS (",
     "  SELECT input.input, input.mesh_id, parent.parent_id, 1",
-    "  FROM ", input_sql, " AS input",
+    "  FROM ",
+    input_sql,
+    " AS input",
     "  INNER JOIN parent ON input.mesh_id = parent.child_id",
     "  UNION ALL",
     "  SELECT lineage.input, lineage.offspring_id, parent.parent_id, lineage.distance + 1",
@@ -43,6 +65,13 @@ ancestor_distances <- function(db, inputs) {
     dplyr::mutate(distance = as.integer(.data$distance))
 }
 
+#' Compute child hop distances
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#' @param inputs A data frame with `input` and `mesh_id` columns.
+#'
+#' @return A tibble with parent, child, category, and distance columns.
+#' @noRd
 child_distances <- function(db, inputs) {
   inputs <- copy_resolved_ids(db, inputs)
   input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
@@ -50,7 +79,9 @@ child_distances <- function(db, inputs) {
   query <- paste0(
     "WITH RECURSIVE descendants(input, parent_id, child_id, distance) AS (",
     "  SELECT input.input, input.mesh_id, parent.child_id, 1",
-    "  FROM ", input_sql, " AS input",
+    "  FROM ",
+    input_sql,
+    " AS input",
     "  INNER JOIN parent ON input.mesh_id = parent.parent_id",
     "  UNION ALL",
     "  SELECT descendants.input, descendants.parent_id, parent.child_id, descendants.distance + 1",
@@ -236,9 +267,10 @@ mesh_is_child <- function(mesh, parent, db = meshdb()) {
 #' @return A tibble of shared terms, ordered by category and term.
 #' @export
 mesh_common_parents <- function(
-    mesh,
-    relationship = c("ancestor", "parent"),
-    db = meshdb()) {
+  mesh,
+  relationship = c("ancestor", "parent"),
+  db = meshdb()
+) {
   relationship <- rlang::arg_match(relationship)
   resolved <- resolve_mesh_ids(mesh, db)
   n_inputs <- dplyr::n_distinct(resolved$mesh_id)
@@ -266,9 +298,16 @@ mesh_common_parents <- function(
   )
 
   common <- relationships |>
-    dplyr::distinct(.data$child_id, .data$common_parent_id, .data$relationship) |>
+    dplyr::distinct(
+      .data$child_id,
+      .data$common_parent_id,
+      .data$relationship
+    ) |>
     dplyr::group_by(.data$common_parent_id, .data$relationship) |>
-    dplyr::summarise(n_terms = dplyr::n_distinct(.data$child_id), .groups = "drop") |>
+    dplyr::summarise(
+      n_terms = dplyr::n_distinct(.data$child_id),
+      .groups = "drop"
+    ) |>
     dplyr::filter(.data$n_terms == n_inputs)
 
   terms <- term_summary(db) |>
@@ -282,6 +321,9 @@ mesh_common_parents <- function(
   terms |>
     dplyr::collect() |>
     dplyr::inner_join(common, by = "common_parent_id") |>
-    dplyr::arrange(.data$common_parent_category_code, .data$common_parent_term) |>
+    dplyr::arrange(
+      .data$common_parent_category_code,
+      .data$common_parent_term
+    ) |>
     dplyr::distinct()
 }

@@ -9,11 +9,12 @@
 #' @return A tibble of matching PubMed-to-MeSH records.
 #' @export
 mesh_map <- function(
-    species = c("human", "mouse"),
-    pmid = NULL,
-    mesh = NULL,
-    gene = NULL,
-    db = meshdb()) {
+  species = c("human", "mouse"),
+  pmid = NULL,
+  mesh = NULL,
+  gene = NULL,
+  db = meshdb()
+) {
   species <- rlang::arg_match(species)
   data <- mesh_tbl(db, species)
 

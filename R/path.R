@@ -1,3 +1,7 @@
+#' Get the default MeSH parquet path
+#'
+#' @return The value of `MESHDB_PARQUET_PATH`, or the package fallback path.
+#' @noRd
 default_mesh_path <- function() {
   Sys.getenv(
     "MESHDB_PARQUET_PATH",
@@ -59,6 +63,13 @@ mesh_tables <- function(path = mesh_data_path()) {
   paths
 }
 
+#' Get a single MeSH parquet table path
+#'
+#' @param table Name of a required MeSH parquet table.
+#' @param path Directory containing the MeSH parquet files.
+#'
+#' @return Path to the requested parquet file.
+#' @noRd
 table_path <- function(table, path = mesh_data_path()) {
   tables <- mesh_tables(path)
   tables[[rlang::arg_match0(table, names(tables))]]

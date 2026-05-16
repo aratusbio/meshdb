@@ -2,13 +2,25 @@
 % Please edit documentation in R/terms.R
 \name{mesh_url}
 \alias{mesh_url}
-\title{Construct a URL for a mesh term}
+\title{Construct a URL for a MeSH term}
 \usage{
 mesh_url(x, term = NULL, ahref = FALSE, target = NULL, ...)
 }
 \arguments{
-\item{x}{the mesh term (or vector of them)}
+\item{x}{Character vector of MeSH IDs, or a data frame containing \code{term_id}
+and \code{term} columns.}
+
+\item{term}{Optional display term used when \code{ahref = TRUE}.}
+
+\item{ahref}{If \code{TRUE}, return HTML anchor tags.}
+
+\item{target}{Optional HTML anchor target.}
+
+\item{...}{Reserved for future use.}
+}
+\value{
+A character vector of NCBI MeSH URLs or HTML anchor tags.
 }
 \description{
-Construct a URL for a mesh term
+Construct a URL for a MeSH term
 }

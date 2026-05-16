@@ -1,3 +1,9 @@
+#' Select available MeSH term columns
+#'
+#' @param data A data frame or lazy table.
+#'
+#' @return Character vector of MeSH term columns present in `data`.
+#' @noRd
 term_columns <- function(data) {
   intersect(
     c(
@@ -13,12 +19,30 @@ term_columns <- function(data) {
   )
 }
 
+#' Summarise unique MeSH terms
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#'
+#' @return A lazy table with unique MeSH term metadata.
+#' @noRd
 term_summary <- function(db) {
   mesh_tbl(db, "meshdb") |>
-    dplyr::select(dplyr::any_of(c("mesh_id", "mesh_term", "category_code", "category"))) |>
+    dplyr::select(dplyr::any_of(c(
+      "mesh_id",
+      "mesh_term",
+      "category_code",
+      "category"
+    ))) |>
     dplyr::distinct()
 }
 
+#' Standardize character values for matching
+#'
+#' @param x Values to standardize.
+#' @param ignore_case If `TRUE`, convert values to lower case.
+#'
+#' @return A character vector.
+#' @noRd
 standardize_values <- function(x, ignore_case = TRUE) {
   x <- as.character(x)
 
@@ -29,7 +53,23 @@ standardize_values <- function(x, ignore_case = TRUE) {
   }
 }
 
-filter_character <- function(data, column, values, exact = TRUE, ignore_case = TRUE) {
+#' Filter a character column
+#'
+#' @param data A data frame or lazy table.
+#' @param column Column name to filter.
+#' @param values Values to match.
+#' @param exact If `TRUE`, require exact matches.
+#' @param ignore_case If `TRUE`, ignore case when matching.
+#'
+#' @return Filtered `data`.
+#' @noRd
+filter_character <- function(
+  data,
+  column,
+  values,
+  exact = TRUE,
+  ignore_case = TRUE
+) {
   if (is.null(values)) {
     return(data)
   }
@@ -48,18 +88,36 @@ filter_character <- function(data, column, values, exact = TRUE, ignore_case = T
   } else if (ignore_case) {
     conditions <- purrr::map(
       values,
-      \(value) rlang::expr(stringr::str_detect(stringr::str_to_lower(!!column), !!value))
+      \(value) {
+        rlang::expr(stringr::str_detect(
+          stringr::str_to_lower(!!column),
+          !!value
+        ))
+      }
     )
-    dplyr::filter(data, !!purrr::reduce(conditions, \(x, y) rlang::expr(!!x | !!y)))
+    dplyr::filter(
+      data,
+      !!purrr::reduce(conditions, \(x, y) rlang::expr(!!x | !!y))
+    )
   } else {
     conditions <- purrr::map(
       values,
       \(value) rlang::expr(stringr::str_detect(!!column, !!value))
     )
-    dplyr::filter(data, !!purrr::reduce(conditions, \(x, y) rlang::expr(!!x | !!y)))
+    dplyr::filter(
+      data,
+      !!purrr::reduce(conditions, \(x, y) rlang::expr(!!x | !!y))
+    )
   }
 }
 
+#' Resolve MeSH IDs from IDs or labels
+#'
+#' @param mesh Character vector of MeSH IDs or exact MeSH term labels.
+#' @param db A `meshdb` object returned by [meshdb()].
+#'
+#' @return A tibble with input values and resolved `mesh_id` values.
+#' @noRd
 resolve_mesh_ids <- function(mesh, db = meshdb()) {
   mesh <- unique(as.character(mesh))
 
@@ -78,10 +136,17 @@ resolve_mesh_ids <- function(mesh, db = meshdb()) {
     lower_unmatched <- stringr::str_to_lower(unmatched)
 
     terms |>
-      dplyr::filter(stringr::str_to_lower(.data$mesh_term) %in% lower_unmatched) |>
+      dplyr::filter(
+        stringr::str_to_lower(.data$mesh_term) %in% lower_unmatched
+      ) |>
       dplyr::select("mesh_term", "mesh_id") |>
       dplyr::collect() |>
-      dplyr::mutate(input = mesh[match(stringr::str_to_lower(.data$mesh_term), stringr::str_to_lower(mesh))]) |>
+      dplyr::mutate(
+        input = mesh[match(
+          stringr::str_to_lower(.data$mesh_term),
+          stringr::str_to_lower(mesh)
+        )]
+      ) |>
       dplyr::select("input", "mesh_id")
   } else {
     tibble::tibble(input = character(), mesh_id = character())
@@ -118,28 +183,44 @@ resolve_mesh_ids <- function(mesh, db = meshdb()) {
 #' @return A tibble of matching MeSH records.
 #' @export
 mesh_lookup <- function(
-    x,
-    by = c("auto", "mesh_id", "mesh_term", "synonym", "qualifier_term"),
-    exact = TRUE,
-    ignore_case = TRUE,
-    include_qualifiers = FALSE,
-    db = meshdb()) {
+  x,
+  by = c("auto", "mesh_id", "mesh_term", "synonym", "qualifier_term"),
+  exact = TRUE,
+  ignore_case = TRUE,
+  include_qualifiers = FALSE,
+  db = meshdb()
+) {
   by <- rlang::arg_match(by)
   data <- mesh_tbl(db, "meshdb")
 
   if (by == "auto") {
-    columns <- intersect(c("mesh_id", "mesh_term", "synonym", "qualifier_term"), colnames(data))
+    columns <- intersect(
+      c("mesh_id", "mesh_term", "synonym", "qualifier_term"),
+      colnames(data)
+    )
     matches <- purrr::map(
       columns,
       \(column) {
-        filter_character(data, column, x, exact = exact, ignore_case = ignore_case) |>
+        filter_character(
+          data,
+          column,
+          x,
+          exact = exact,
+          ignore_case = ignore_case
+        ) |>
           dplyr::collect()
       }
     )
 
     out <- dplyr::bind_rows(matches)
   } else {
-    out <- filter_character(data, by, x, exact = exact, ignore_case = ignore_case)
+    out <- filter_character(
+      data,
+      by,
+      x,
+      exact = exact,
+      ignore_case = ignore_case
+    )
   }
 
   out <- out |>
@@ -149,17 +230,29 @@ mesh_lookup <- function(
 
   if (!include_qualifiers) {
     out <- out |>
-      dplyr::select(dplyr::any_of(c("mesh_id", "mesh_term", "category_code", "category"))) |>
+      dplyr::select(dplyr::any_of(c(
+        "mesh_id",
+        "mesh_term",
+        "category_code",
+        "category"
+      ))) |>
       dplyr::distinct()
   }
 
   tibble::as_tibble(out)
 }
 
-#' Construct a URL for a mesh term
+#' Construct a URL for a MeSH term
 #'
+#' @param x Character vector of MeSH IDs, or a data frame containing `term_id`
+#'   and `term` columns.
+#' @param term Optional display term used when `ahref = TRUE`.
+#' @param ahref If `TRUE`, return HTML anchor tags.
+#' @param target Optional HTML anchor target.
+#' @param ... Reserved for future use.
+#'
+#' @return A character vector of NCBI MeSH URLs or HTML anchor tags.
 #' @export
-#' @param x the mesh term (or vector of them)
 mesh_url <- function(x, term = NULL, ahref = FALSE, target = NULL, ...) {
   checkmate::assert_flag(ahref)
   if (checkmate::test_data_frame(x)) {

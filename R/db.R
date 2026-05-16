@@ -1,3 +1,11 @@
+#' Register a parquet file as a DuckDB temporary view
+#'
+#' @param con A DBI connection.
+#' @param table Name for the temporary DuckDB view.
+#' @param path Path to a parquet file.
+#'
+#' @return The result of [DBI::dbExecute()], invisibly from DuckDB.
+#' @noRd
 register_parquet_view <- function(con, table, path) {
   table_sql <- DBI::dbQuoteIdentifier(con, table)
   path_sql <- DBI::dbQuoteString(con, normalizePath(path, mustWork = TRUE))
@@ -64,6 +72,12 @@ mesh_disconnect <- function(db, shutdown = TRUE) {
   invisible(NULL)
 }
 
+#' Validate a meshdb object
+#'
+#' @param db Object to validate.
+#'
+#' @return `db`, invisibly.
+#' @noRd
 check_meshdb <- function(db) {
   if (!inherits(db, "meshdb")) {
     rlang::abort("`db` must be a meshdb object created by `meshdb()`.")
@@ -76,6 +90,13 @@ check_meshdb <- function(db) {
   invisible(db)
 }
 
+#' Access a registered meshdb table
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#' @param table Name of a registered table.
+#'
+#' @return A lazy dbplyr table.
+#' @noRd
 mesh_tbl <- function(db, table) {
   check_meshdb(db)
   tbl <- db$src[[rlang::arg_match0(table, names(db$src))]]
@@ -83,13 +104,29 @@ mesh_tbl <- function(db, table) {
   tbl
 }
 
+#' Copy resolved MeSH IDs to DuckDB
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#' @param resolved A data frame of resolved MeSH IDs.
+#'
+#' @return A lazy dbplyr table backed by a temporary DuckDB table.
+#' @noRd
 copy_resolved_ids <- function(db, resolved) {
   check_meshdb(db)
 
   name <- paste0(
     "meshdb_resolved_",
-    format(as.integer(stats::runif(1, 1, .Machine$integer.max)), scientific = FALSE)
+    format(
+      as.integer(stats::runif(1, 1, .Machine$integer.max)),
+      scientific = FALSE
+    )
   )
 
-  dplyr::copy_to(db$con, resolved, name = name, temporary = TRUE, overwrite = TRUE)
+  dplyr::copy_to(
+    db$con,
+    resolved,
+    name = name,
+    temporary = TRUE,
+    overwrite = TRUE
+  )
 }
