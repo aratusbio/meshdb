@@ -155,3 +155,42 @@ mesh_lookup <- function(
 
   tibble::as_tibble(out)
 }
+
+#' Construct a URL for a mesh term
+#'
+#' @export
+#' @param x the mesh term (or vector of them)
+mesh_url <- function(x, term = NULL, ahref = FALSE, target = NULL, ...) {
+  checkmate::assert_flag(ahref)
+  if (checkmate::test_data_frame(x)) {
+    checkmate::assert_subset(c("term_id", "term"), colnames(x))
+    term <- x[["term"]]
+    term_id <- x[["term_id"]]
+  } else {
+    term_id <- x
+  }
+  term_id <- checkmate::assert_character(
+    term_id,
+    pattern = "[DQ]\\d+$",
+    min.len = 1,
+    min.chars = 5
+  )
+
+  out <- sprintf("https://www.ncbi.nlm.nih.gov/mesh/?term=%s", term_id)
+
+  if (ahref) {
+    if (checkmate::test_character(term, len = length(out))) {
+      out <- sprintf("<a href='%s':::target:::>%s</a> [%s]", out, term, term_id)
+    } else {
+      out <- sprintf("<a href='%s':::target:::>%s</a>", out, x)
+    }
+  }
+
+  if (checkmate::test_string(target, min.chars = 1)) {
+    target <- sprintf(" target='%s'", target)
+  } else {
+    target <- ""
+  }
+  out <- sub(":::target:::", target, out)
+  out
+}

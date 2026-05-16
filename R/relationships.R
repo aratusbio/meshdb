@@ -5,7 +5,73 @@ annotate_terms <- function(data, id_column, prefix, db) {
       dplyr::everything()
     )
 
+  if (!inherits(data, "tbl_sql")) {
+    terms <- dplyr::collect(terms)
+  }
+
   dplyr::left_join(data, terms, by = stats::setNames(paste0(prefix, "_id"), id_column))
+}
+
+ancestor_distances <- function(db, inputs) {
+  inputs <- copy_resolved_ids(db, inputs)
+  input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
+
+  query <- paste0(
+    "WITH RECURSIVE lineage(input, offspring_id, ancestor_id, distance) AS (",
+    "  SELECT input.input, input.mesh_id, parent.parent_id, 1",
+    "  FROM ", input_sql, " AS input",
+    "  INNER JOIN parent ON input.mesh_id = parent.child_id",
+    "  UNION ALL",
+    "  SELECT lineage.input, lineage.offspring_id, parent.parent_id, lineage.distance + 1",
+    "  FROM lineage",
+    "  INNER JOIN parent ON lineage.ancestor_id = parent.child_id",
+    "  WHERE lineage.distance < 100",
+    ")",
+    " SELECT lineage.input, lineage.offspring_id, lineage.ancestor_id,",
+    "        ancestor.category_code, ancestor.category,",
+    "        MIN(lineage.distance) AS distance",
+    " FROM lineage",
+    " INNER JOIN ancestor",
+    "    ON lineage.offspring_id = ancestor.offspring_id",
+    "   AND lineage.ancestor_id = ancestor.ancestor_id",
+    " GROUP BY lineage.input, lineage.offspring_id, lineage.ancestor_id,",
+    "          ancestor.category_code, ancestor.category"
+  )
+
+  DBI::dbGetQuery(db$con, query) |>
+    tibble::as_tibble() |>
+    dplyr::mutate(distance = as.integer(.data$distance))
+}
+
+child_distances <- function(db, inputs) {
+  inputs <- copy_resolved_ids(db, inputs)
+  input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
+
+  query <- paste0(
+    "WITH RECURSIVE descendants(input, parent_id, child_id, distance) AS (",
+    "  SELECT input.input, input.mesh_id, parent.child_id, 1",
+    "  FROM ", input_sql, " AS input",
+    "  INNER JOIN parent ON input.mesh_id = parent.parent_id",
+    "  UNION ALL",
+    "  SELECT descendants.input, descendants.parent_id, parent.child_id, descendants.distance + 1",
+    "  FROM descendants",
+    "  INNER JOIN parent ON descendants.child_id = parent.parent_id",
+    "  WHERE descendants.distance < 100",
+    ")",
+    " SELECT descendants.input, descendants.parent_id, descendants.child_id,",
+    "        ancestor.category_code, ancestor.category,",
+    "        MIN(descendants.distance) AS distance",
+    " FROM descendants",
+    " INNER JOIN ancestor",
+    "    ON descendants.parent_id = ancestor.ancestor_id",
+    "   AND descendants.child_id = ancestor.offspring_id",
+    " GROUP BY descendants.input, descendants.parent_id, descendants.child_id,",
+    "          ancestor.category_code, ancestor.category"
+  )
+
+  DBI::dbGetQuery(db$con, query) |>
+    tibble::as_tibble() |>
+    dplyr::mutate(distance = as.integer(.data$distance))
 }
 
 #' Find direct parent terms
@@ -36,26 +102,29 @@ mesh_parents <- function(mesh, db = meshdb()) {
       "category"
     ))) |>
     dplyr::distinct() |>
-    dplyr::collect()
+    dplyr::collect() |>
+    # dplyr::rename(
+    #   query_id = offspring_id,
+    #   mesh_id = ancestor_id
+    # ) |>
+    identity()
 }
 
-#' Find direct child terms
+#' Find child terms
 #'
 #' @param mesh Character vector of MeSH IDs or exact MeSH term labels.
 #' @param db A `meshdb` object returned by [meshdb()].
 #'
-#' @return A tibble with one row per input term and direct child.
+#' @return A tibble with one row per input term and child. The `distance`
+#'   column gives the number of direct-child hops from the input term to the
+#'   child.
 #' @export
 mesh_children <- function(mesh, db = meshdb()) {
   resolved <- resolve_mesh_ids(mesh, db)
-  resolved <- copy_resolved_ids(db, resolved)
-  parents <- mesh_tbl(db, "parent")
+  distances <- child_distances(db, resolved)
 
-  resolved |>
-    dplyr::inner_join(parents, by = c("mesh_id" = "parent_id")) |>
-    dplyr::rename(child_id = "child_id") |>
+  distances |>
     annotate_terms("child_id", "child", db) |>
-    dplyr::rename(parent_id = "mesh_id") |>
     dplyr::select(dplyr::any_of(c(
       "input",
       "parent_id",
@@ -64,10 +133,18 @@ mesh_children <- function(mesh, db = meshdb()) {
       "child_category_code",
       "child_category",
       "category_code",
-      "category"
+      "category",
+      "distance"
     ))) |>
     dplyr::distinct() |>
-    dplyr::collect()
+    tibble::as_tibble() |>
+    dplyr::arrange(.data$distance, .data$child_term) |>
+    # dplyr::rename(
+    #   query_id = parent_id,
+    #   mesh_id = child_id,
+    #   mesh_term = child_term
+    # ) |>
+    identity()
 }
 
 #' Find ancestor terms
@@ -75,18 +152,16 @@ mesh_children <- function(mesh, db = meshdb()) {
 #' @param mesh Character vector of MeSH IDs or exact MeSH term labels.
 #' @param db A `meshdb` object returned by [meshdb()].
 #'
-#' @return A tibble with one row per input term and ancestor.
+#' @return A tibble with one row per input term and ancestor. The `distance`
+#'   column gives the number of direct-parent hops from the input term to the
+#'   ancestor.
 #' @export
 mesh_ancestors <- function(mesh, db = meshdb()) {
   resolved <- resolve_mesh_ids(mesh, db)
-  resolved <- copy_resolved_ids(db, resolved)
-  ancestors <- mesh_tbl(db, "ancestor")
+  distances <- ancestor_distances(db, resolved)
 
-  resolved |>
-    dplyr::inner_join(ancestors, by = c("mesh_id" = "offspring_id")) |>
-    dplyr::rename(ancestor_id = "ancestor_id") |>
+  distances |>
     annotate_terms("ancestor_id", "ancestor", db) |>
-    dplyr::rename(offspring_id = "mesh_id") |>
     dplyr::select(dplyr::any_of(c(
       "input",
       "offspring_id",
@@ -95,10 +170,12 @@ mesh_ancestors <- function(mesh, db = meshdb()) {
       "ancestor_category_code",
       "ancestor_category",
       "category_code",
-      "category"
+      "category",
+      "distance"
     ))) |>
     dplyr::distinct() |>
-    dplyr::collect()
+    tibble::as_tibble() |>
+    dplyr::arrange(.data$distance, .data$ancestor_term)
 }
 
 #' Test whether MeSH IDs descend from a parent term
@@ -134,38 +211,15 @@ mesh_is_child <- function(mesh, parent, db = meshdb()) {
     rlang::abort("`parent` must resolve to a single MeSH term.")
   }
 
-  inputs <- tibble::tibble(row_id = seq_along(mesh), mesh_id = mesh)
-  inputs <- copy_resolved_ids(db, inputs)
+  inputs <- tibble::tibble(input = mesh, mesh_id = mesh)
+  distances <- ancestor_distances(db, inputs) |>
+    dplyr::filter(.data$ancestor_id == parent_resolved$mesh_id[[1]]) |>
+    dplyr::group_by(.data$offspring_id) |>
+    dplyr::summarise(distance = min(.data$distance), .groups = "drop")
 
-  input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
-  parent_sql <- DBI::dbQuoteString(db$con, parent_resolved$mesh_id[[1]])
-
-  query <- paste0(
-    "WITH RECURSIVE lineage(row_id, mesh_id, ancestor_id, distance) AS (",
-    "  SELECT input.row_id, input.mesh_id, parent.parent_id, 1",
-    "  FROM ", input_sql, " AS input",
-    "  INNER JOIN parent ON input.mesh_id = parent.child_id",
-    "  UNION ALL",
-    "  SELECT lineage.row_id, lineage.mesh_id, parent.parent_id, lineage.distance + 1",
-    "  FROM lineage",
-    "  INNER JOIN parent ON lineage.ancestor_id = parent.child_id",
-    "  WHERE lineage.distance < 100",
-    ")",
-    " SELECT input.row_id, MIN(lineage.distance) AS distance",
-    " FROM ", input_sql, " AS input",
-    " LEFT JOIN lineage",
-    "   ON input.row_id = lineage.row_id",
-    "  AND lineage.ancestor_id = ", parent_sql,
-    " GROUP BY input.row_id",
-    " ORDER BY input.row_id"
-  )
-
-  DBI::dbGetQuery(db$con, query) |>
-    tibble::as_tibble() |>
-    dplyr::mutate(
-      is_child = !is.na(.data$distance),
-      distance = as.integer(.data$distance)
-    ) |>
+  tibble::tibble(mesh_id = mesh) |>
+    dplyr::left_join(distances, by = c("mesh_id" = "offspring_id")) |>
+    dplyr::mutate(is_child = !is.na(.data$distance)) |>
     dplyr::select("is_child", "distance")
 }
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/relationships.R
 \name{mesh_children}
 \alias{mesh_children}
-\title{Find direct child terms}
+\title{Find child terms}
 \usage{
 mesh_children(mesh, db = meshdb())
 }
@@ -12,8 +12,10 @@ mesh_children(mesh, db = meshdb())
 \item{db}{A \code{meshdb} object returned by \code{\link[=meshdb]{meshdb()}}.}
 }
 \value{
-A tibble with one row per input term and direct child.
+A tibble with one row per input term and child. The \code{distance}
+column gives the number of direct-child hops from the input term to the
+child.
 }
 \description{
-Find direct child terms
+Find child terms
 }

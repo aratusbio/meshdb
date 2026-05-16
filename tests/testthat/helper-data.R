@@ -52,6 +52,8 @@ local_mesh_path <- function() {
 }
 
 local_meshdb <- function() {
+  if (!testthat::is_testing()) return(meshdb())
+
   db <- meshdb(local_mesh_path())
   withr::defer(mesh_disconnect(db), testthat::teardown_env())
   db

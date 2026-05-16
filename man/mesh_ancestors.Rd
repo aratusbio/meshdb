@@ -12,7 +12,9 @@ mesh_ancestors(mesh, db = meshdb())
 \item{db}{A \code{meshdb} object returned by \code{\link[=meshdb]{meshdb()}}.}
 }
 \value{
-A tibble with one row per input term and ancestor.
+A tibble with one row per input term and ancestor. The \code{distance}
+column gives the number of direct-parent hops from the input term to the
+ancestor.
 }
 \description{
 Find ancestor terms
