@@ -1,13 +1,15 @@
 Package: meshdb
 Title: Navigate a Local MeSH Ontology Database
 Version: 0.0.0.9000
-Authors@R: 
-    person("Steve", "User", role = c("aut", "cre"), email = "steve@example.com")
-Author: Steve User
-Maintainer: Steve User <steve@example.com>
+Authors@R: c(
+    person(
+        "Steve", "Lianoglou", , "steve@aratus.bio", c("aut", "cre"),
+        comment = c(ORCID = "0000-0002-0924-1754")
+    )
+    )
 Description: Query local parquet files containing MeSH terms, parent-child
     relationships, ancestor relationships, and PubMed-to-MeSH mappings.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Depends:

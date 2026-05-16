@@ -76,4 +76,4 @@ If dependencies are missing, install the R package dependencies listed in `DESCR
 - Avoid requiring the full production parquet directory in tests; extend the temporary fixture data instead.
 - This directory may not be a Git repository in the current workspace, so use filesystem inspection rather than relying on Git history.
 - After generating or modifying an R script (`.R` file), always format the file by executing the terminal command `air format [path/to/file.R]`.
-
+- After running `R CMD check`, clearly enumerate any errors, warnings, and notes found before removing the check output/artifacts; then remove any check directories you created, such as `*.Rcheck`, without asking first.
