@@ -19,6 +19,7 @@ Imports:
     dbplyr,
     dplyr,
     duckdb,
+    pillar,
     purrr,
     rlang,
     stringr,

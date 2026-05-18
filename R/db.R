@@ -55,6 +55,101 @@ meshdb <- function(path = mesh_data_path()) {
   )
 }
 
+#' Format a meshdb object
+#'
+#' @param x A `meshdb` object.
+#' @param ... Unused.
+#'
+#' @return A character vector containing a compact summary of `x`.
+#' @export
+#' @noRd
+format.meshdb <- function(x, ...) {
+  connected <- DBI::dbIsValid(x$con)
+  status <- if (connected) "connected" else "disconnected"
+
+  output <- c(
+    "<meshdb>",
+    paste0("Status: ", status),
+    paste0("Path: ", x$path),
+    paste0("Views: ", paste(names(x$src), collapse = ", "))
+  )
+
+  if (connected) {
+    category_counts <- x$src$meshdb |>
+      dplyr::group_by(.data$category_code, .data$category) |>
+      dplyr::summarise(n = dplyr::n(), .groups = "drop") |>
+      dplyr::arrange(.data$category_code, .data$category) |>
+      dplyr::collect()
+
+    output <- c(
+      output,
+      "Terms by category:",
+      format_category_counts(category_counts)
+    )
+  }
+
+  output
+}
+
+#' Format mesh category counts as a compact ASCII table
+#'
+#' @param category_counts A data frame with `category_code`, `category`, and
+#'   `n` columns.
+#'
+#' @return A character vector containing one table row per element.
+#' @noRd
+format_category_counts <- function(category_counts) {
+  columns <- list(
+    category_code = as.character(category_counts$category_code),
+    category = as.character(category_counts$category),
+    terms = format(category_counts$n, big.mark = ",", scientific = FALSE)
+  )
+
+  headers <- names(columns)
+  widths <- purrr::map2_int(
+    headers,
+    columns,
+    \(header, column) max(nchar(c(header, column), type = "width"))
+  )
+
+  header <- purrr::map2_chr(
+    headers,
+    widths,
+    \(header, width) pillar::align(header, width, align = "left")
+  )
+  header <- paste(header, collapse = "  ")
+  alignments <- c("left", "left", "right")
+  rows <- purrr::pmap_chr(
+    columns,
+    \(category_code, category, terms) {
+      values <- c(category_code, category, terms)
+      aligned <- purrr::pmap_chr(
+        list(values, widths, alignments),
+        \(value, width, alignment) {
+          pillar::align(value, width, align = alignment)
+        }
+      )
+      paste(aligned, collapse = "  ")
+    }
+  )
+
+  paste0("  ", c(header, rows))
+}
+
+#' Print a meshdb object
+#'
+#' @param x A `meshdb` object.
+#' @param ... Unused.
+#'
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.meshdb <- function(x, ...) {
+  cat(format(x), sep = "\n")
+
+  invisible(x)
+}
+
 #' Disconnect a MeSH DuckDB connection
 #'
 #' @param db A `meshdb` object returned by [meshdb()].
