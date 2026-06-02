@@ -18,6 +18,19 @@ You can install the development version of meshdb like so:
 remotes::install_github("aratusbio/meshdb")
 ```
 
+## Configuration
+
+Set the `MESHDB_PARQUET_PATH` environment variable to make your life
+easy.
+
 ## Example
+
+``` r
+devtools::load_all(".")
+#> ℹ Loading meshdb
+mdb.dir <- checkmate::assert_directory_exists(Sys.getenv("MESHDB_PARQUET_PATH"))
+
+mdb <- meshdb()
+```
 
 WIP: enter more here.
