@@ -28,6 +28,59 @@ test_that("mesh_parents and mesh_ancestors traverse relationships", {
   )
 })
 
+test_that("mesh_ancestors_at_depth preserves hierarchy branches", {
+  db <- local_meshdb()
+
+  root <- mesh_ancestors_at_depth("D000005", depth = 1, db = db)
+
+  expect_named(
+    root,
+    c(
+      "input",
+      "mesh_id",
+      "mesh_term",
+      "ancestor_id",
+      "ancestor_term",
+      "ancestor_depth",
+      "distance",
+      "parent_id",
+      "parent_term"
+    )
+  )
+  expect_equal(root$ancestor_id, c("D000001", "D000001"))
+  expect_equal(root$ancestor_term, c("Root", "Root"))
+  expect_equal(root$ancestor_depth, c(1L, 1L))
+  expect_equal(root$distance, c(2L, 2L))
+  expect_setequal(root$parent_term, c("Parent A", "Parent B"))
+
+  parents <- mesh_ancestors_at_depth("Child B", depth = 2, db = db)
+  expect_setequal(parents$ancestor_id, c("D000002", "D000003"))
+  expect_setequal(parents$ancestor_term, c("Parent A", "Parent B"))
+  expect_equal(parents$ancestor_depth, c(2L, 2L))
+  expect_equal(parents$distance, c(1L, 1L))
+  expect_equal(parents$ancestor_term, parents$parent_term)
+})
+
+test_that("mesh_ancestors_at_depth validates depth", {
+  db <- local_meshdb()
+
+  expect_error(
+    mesh_ancestors_at_depth("D000005", depth = 0, db = db),
+    "`depth` must be a single positive integer.",
+    fixed = TRUE
+  )
+  expect_error(
+    mesh_ancestors_at_depth("D000005", depth = 1.5, db = db),
+    "`depth` must be a single positive integer.",
+    fixed = TRUE
+  )
+  expect_error(
+    mesh_ancestors_at_depth("D000005", depth = c(1, 2), db = db),
+    "`depth` must be a single positive integer.",
+    fixed = TRUE
+  )
+})
+
 test_that("mesh_common_parents identifies shared direct and ancestor parents", {
   db <- local_meshdb()
 

@@ -105,6 +105,61 @@ child_distances <- function(db, inputs) {
     dplyr::mutate(distance = as.integer(.data$distance))
 }
 
+#' Find ancestor branches at a tree depth
+#'
+#' @param db A `meshdb` object returned by [meshdb()].
+#' @param inputs A data frame with `input` and `mesh_id` columns.
+#' @param depth Absolute 1-indexed tree depth to find.
+#'
+#' @return A tibble with input, ancestor, branch parent, distance, and depth
+#'   columns.
+#' @noRd
+ancestor_branches_at_depth <- function(db, inputs, depth) {
+  inputs <- copy_resolved_ids(db, inputs)
+  input_sql <- DBI::dbQuoteIdentifier(db$con, dbplyr::remote_name(inputs))
+
+  query <- paste0(
+    "WITH RECURSIVE",
+    " lineage(input, mesh_id, ancestor_id, parent_id, distance) AS (",
+    "  SELECT input.input, input.mesh_id, parent.parent_id, parent.parent_id, 1",
+    "  FROM ",
+    input_sql,
+    " AS input",
+    "  INNER JOIN parent ON input.mesh_id = parent.child_id",
+    "  UNION ALL",
+    "  SELECT lineage.input, lineage.mesh_id, parent.parent_id, lineage.parent_id, lineage.distance + 1",
+    "  FROM lineage",
+    "  INNER JOIN parent ON lineage.ancestor_id = parent.child_id",
+    "  WHERE lineage.distance < 100",
+    " ),",
+    " term_depths(mesh_id, ancestor_depth) AS (",
+    "  SELECT meshdb.mesh_id, 1",
+    "  FROM meshdb",
+    "  WHERE NOT EXISTS (",
+    "    SELECT 1 FROM parent WHERE parent.child_id = meshdb.mesh_id",
+    "  )",
+    "  UNION ALL",
+    "  SELECT parent.child_id, term_depths.ancestor_depth + 1",
+    "  FROM term_depths",
+    "  INNER JOIN parent ON term_depths.mesh_id = parent.parent_id",
+    "  WHERE term_depths.ancestor_depth < 100",
+    " )",
+    " SELECT lineage.input, lineage.mesh_id, lineage.ancestor_id,",
+    "        lineage.parent_id, lineage.distance, term_depths.ancestor_depth",
+    " FROM lineage",
+    " INNER JOIN term_depths ON lineage.ancestor_id = term_depths.mesh_id",
+    " WHERE term_depths.ancestor_depth = ",
+    as.integer(depth)
+  )
+
+  DBI::dbGetQuery(db$con, query) |>
+    tibble::as_tibble() |>
+    dplyr::mutate(
+      distance = as.integer(.data$distance),
+      ancestor_depth = as.integer(.data$ancestor_depth)
+    )
+}
+
 #' Find direct parent terms
 #'
 #' @param mesh Character vector of MeSH IDs or exact MeSH term labels.
@@ -207,6 +262,65 @@ mesh_ancestors <- function(mesh, db = meshdb()) {
     dplyr::distinct() |>
     tibble::as_tibble() |>
     dplyr::arrange(.data$distance, .data$ancestor_term)
+}
+
+#' Find ancestor branches at an absolute tree depth
+#'
+#' Given MeSH IDs or exact term labels, climb every parent branch independently
+#' and return ancestors whose independently calculated tree depth equals
+#' `depth`. Tree depth is 1-indexed, so root terms have `ancestor_depth = 1`.
+#'
+#' @param mesh Character vector of MeSH IDs or exact MeSH term labels.
+#' @param depth A single positive integer giving the absolute tree depth to
+#'   return.
+#' @param db A `meshdb` object returned by [meshdb()].
+#'
+#' @return A tibble with one row per input term, branch parent, and ancestor at
+#'   `depth`. The `distance` column gives the number of direct-parent hops from
+#'   the input term to the ancestor.
+#' @export
+#' @examples
+#' mdb <- meshdb()
+#' # ancestors for fibrosis term
+#' mesh_ancestors_at_depth("D000087525", 3, mdb)
+mesh_ancestors_at_depth <- function(mesh, depth, db = meshdb()) {
+  if (
+    length(depth) != 1 ||
+      !is.numeric(depth) ||
+      is.na(depth) ||
+      !is.finite(depth) ||
+      depth < 1 ||
+      depth != floor(depth)
+  ) {
+    rlang::abort("`depth` must be a single positive integer.")
+  }
+
+  resolved <- resolve_mesh_ids(mesh, db)
+  branches <- ancestor_branches_at_depth(db, resolved, depth)
+
+  branches |>
+    annotate_terms("mesh_id", "mesh", db) |>
+    annotate_terms("ancestor_id", "ancestor", db) |>
+    annotate_terms("parent_id", "parent", db) |>
+    dplyr::select(dplyr::any_of(c(
+      "input",
+      "mesh_id",
+      "mesh_term",
+      "ancestor_id",
+      "ancestor_term",
+      "ancestor_depth",
+      "distance",
+      "parent_id",
+      "parent_term"
+    ))) |>
+    dplyr::distinct() |>
+    tibble::as_tibble() |>
+    dplyr::arrange(
+      .data$input,
+      .data$ancestor_depth,
+      .data$ancestor_term,
+      .data$parent_term
+    )
 }
 
 #' Test whether MeSH IDs descend from a parent term

@@ -9,11 +9,11 @@ Tools for querying MeSH terms and traversing parent-child and ancestor
 relationships stored in local parquet files.
 }
 \author{
-\strong{Maintainer}: Steve User \email{steve@example.com}
+\strong{Maintainer}: Steve Lianoglou \email{steve@aratus.bio} (\href{https://orcid.org/0000-0002-0924-1754}{ORCID})
 
 Authors:
 \itemize{
-  \item Steve User \email{steve@example.com}
+  \item Steve Lianoglou \email{steve@aratus.bio} (\href{https://orcid.org/0000-0002-0924-1754}{ORCID})
 }
 
 }

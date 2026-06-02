@@ -3,6 +3,7 @@
 S3method(format,meshdb)
 S3method(print,meshdb)
 export(mesh_ancestors)
+export(mesh_ancestors_at_depth)
 export(mesh_children)
 export(mesh_common_parents)
 export(mesh_data_path)
